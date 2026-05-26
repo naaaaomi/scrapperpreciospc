@@ -146,6 +146,7 @@ def parse_price(value: object) -> int | None:
     text = clean_text(value)
     patterns = [
         r"(?:\$|ARS|AR\$)\s*([0-9]{1,3}(?:[.\s][0-9]{3})*(?:,[0-9]{1,2})?|[0-9]+)",
+        r"\b([0-9]{1,3}(?:[.\s][0-9]{3})+(?:,[0-9]{1,2})?)\b",
         r'"price"\s*:\s*"?([0-9]+(?:[.,][0-9]+)?)"?',
     ]
     for pattern in patterns:
@@ -154,6 +155,11 @@ def parse_price(value: object) -> int | None:
             number = match.group(1).replace(".", "").replace(" ", "").split(",")[0]
             return int(number) if number.isdigit() else None
     return None
+
+
+def has_truncated_ars_prices(products: list[WebProduct]) -> bool:
+    prices = [product.price_ars for product in products if product.price_ars is not None]
+    return bool(prices) and max(prices) < 1000
 
 
 def parse_number(value: object) -> int | None:
@@ -414,6 +420,42 @@ def products_from_jsonld(page_html: str, page_url: str, scraped_at: str) -> list
     return rows
 
 
+def products_from_data_attrs(page_html: str, page_url: str, scraped_at: str) -> list[WebProduct]:
+    rows = []
+    seen: set[tuple[str, int]] = set()
+    source_label = source_label_for_url(page_url)
+    card_pattern = r"<[A-Za-z0-9]+\b(?=[^>]*\bdata-nombre=)(?=[^>]*\bdata-precio=)[^>]*>"
+    attr_pattern = r"([A-Za-z0-9_-]+)\s*=\s*([\"'])(.*?)\2"
+    for idx, match in enumerate(re.finditer(card_pattern, page_html, flags=re.IGNORECASE | re.DOTALL), start=1):
+        attrs = {key.lower(): html.unescape(value) for key, _, value in re.findall(attr_pattern, match.group(0), flags=re.DOTALL)}
+        name = clean_text(attrs.get("data-nombre"))
+        price = parse_number(attrs.get("data-precio"))
+        if not name or price is None:
+            continue
+        key = (name.lower(), price)
+        if key in seen:
+            continue
+        seen.add(key)
+        following_html = page_html[match.end() : match.end() + 2500]
+        href = re.search(r'<a\b[^>]*href=["\']([^"\']+)["\']', following_html, flags=re.IGNORECASE)
+        rows.append(
+            WebProduct(
+                source=urlparse(page_url).netloc,
+                source_label=source_label,
+                category=infer_category(page_url, attrs.get("data-cat", ""), name),
+                name=name,
+                price_ars=price,
+                url=urljoin(page_url, href.group(1) if href else page_url),
+                article=clean_text(attrs.get("data-id") or idx),
+                brand=infer_brand(name, attrs.get("data-marca", "")),
+                availability="",
+                page=1,
+                scraped_at=scraped_at,
+            )
+        )
+    return rows
+
+
 def candidate_blocks(page_html: str) -> list[str]:
     blocks = re.findall(
         r"<(?P<tag>article|li|div)\b[^>]*(?:product|producto|item|card|catalog|listado)[^>]*>[\s\S]*?</(?P=tag)>",
@@ -500,10 +542,16 @@ def scrape_url(url: str) -> list[WebProduct]:
             return products
     page_html = request_html(url)
     scraped_at = datetime.now().isoformat(timespec="seconds")
-    products = products_from_jsonld(page_html, url, scraped_at)
-    if products:
+    products = products_from_data_attrs(page_html, url, scraped_at)
+    if products and not has_truncated_ars_prices(products):
         return products
-    return products_from_html_blocks(page_html, url, scraped_at)
+    products = products_from_jsonld(page_html, url, scraped_at)
+    if products and not has_truncated_ars_prices(products):
+        return products
+    html_products = products_from_html_blocks(page_html, url, scraped_at)
+    if html_products:
+        return html_products
+    return products
 
 
 def scrape_urls(urls: list[str]) -> list[WebProduct]:
