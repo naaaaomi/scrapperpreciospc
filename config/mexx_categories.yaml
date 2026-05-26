@@ -1,0 +1,27 @@
+source: mexx
+base_url: https://www.mexx.com.ar
+categories:
+  mothers:
+    name: Motherboards
+    url: https://www.mexx.com.ar/productos-rubro/motherboards/
+  procesadores:
+    name: Procesadores
+    url: https://www.mexx.com.ar/productos-rubro/procesadores/
+  memorias:
+    name: Memorias Ram
+    url: https://www.mexx.com.ar/productos-rubro/memorias-ram/
+  almacenamiento:
+    name: Almacenamiento
+    url: https://www.mexx.com.ar/productos-rubro/almacenamiento/
+  placas_video:
+    name: Placas de Video
+    url: https://www.mexx.com.ar/productos-rubro/placas-de-video/
+  fuentes:
+    name: Fuentes de Poder
+    url: https://www.mexx.com.ar/productos-rubro/fuentes-de-poder/
+  refrigeracion:
+    name: Refrigeracion PC
+    url: https://www.mexx.com.ar/productos-rubro/refrigeracion-pc/
+  monitores:
+    name: Monitores
+    url: https://www.mexx.com.ar/productos-rubro/monitores/
